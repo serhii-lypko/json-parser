@@ -20,8 +20,9 @@ type $fixme = any;
 // TODO: test cases with broken inputs:
 // {"widget:"awesome","element":"hello"}
 
+// const simple = `{"widget":"awesome","element":"hello","right":"yes"}`;
 // const simple = `{"widget":"awesome"}`;
-const simple = `{"widget":"awesome","element":"hello","amaing":"always"}`;
+const simple = `{"widget":"awesome","amazing":{"element":"hello","yeah":"definitely","newKey":{"yes":"new key"}}}`;
 // const str2 = `{"widget":{"debug":"on","logger":"off"}}`;
 
 // NOTE: let's pretend now values can be only string or object
@@ -70,16 +71,19 @@ class Parser {
 
   parse(input: string): Level {
     this.input = input;
-
     this.result = this.openLevel();
+
+    if (this.stack.length != 0) {
+      throw new Error('Parsing error');
+    }
+
     return this.result;
   }
 
-  /// Will make "recursive" calls from the parseLevel
   openLevel(): Level {
-    const openingChar = this.input.charCodeAt(this.cursor);
+    const opening = this.input.charCodeAt(this.cursor);
 
-    switch (openingChar) {
+    switch (opening) {
       case Token.OPEN_BRACE:
         this.stack.push({});
         this.advanceCursor();
@@ -109,14 +113,20 @@ class Parser {
     }
 
     while (this.currentSymbolCharCode != Token.CLOSE_BRACE) {
+      log('iter');
       this.parseKVRecord();
 
-      if (!this.isCurrentSymbolComma) {
-        throw new Error('Unexpected character between KVs at record level');
+      switch (this.currentSymbolCharCode) {
+        case Token.CLOSE_BRACE:
+          break;
+        case Token.COMMA:
+          this.advanceCursor();
+          continue;
+        default:
+          throw new Error(
+            `Unexpected character ${this.currentSymbol} between KVs at record level`
+          );
       }
-
-      this.advanceCursor();
-      continue;
     }
   }
 
@@ -125,10 +135,11 @@ class Parser {
 
     /// Expecting a :
     if (!this.isCurrentSymbolColon) {
-      throw new Error('Unexpected character between KV pair elements');
+      throw new Error(
+        `Unexpected character between KV pair elements ${this.currentSymbol}`
+      );
     }
     this.advanceCursor();
-
     this.stack[this.stack.length - 1][key] = this.parseKVValue();
   }
 
@@ -140,13 +151,15 @@ class Parser {
     let res = '';
 
     if (!this.isCurrentSymbolQuote) {
-      throw new Error('Unexpected character at parsing string');
+      throw new Error(
+        `Unexpected character at parsing string ${this.currentSymbol}`
+      );
     }
 
     this.advanceCursor();
 
     while (!this.isCurrentSymbolQuote) {
-      res += this.input[this.cursor];
+      res += this.currentSymbol;
       this.advanceCursor();
     }
 
@@ -163,7 +176,7 @@ class Parser {
       case Token.QUOTE:
         return this.parseString();
 
-      // TODO more options as values: numbers, booleans and nulls
+      // TODO: more options as values: numbers, booleans and nulls
       default:
       //
     }
@@ -171,11 +184,6 @@ class Parser {
 
   advanceCursor() {
     this.cursor++;
-  }
-
-  _printState() {
-    log(this.input[this.cursor]);
-    log(this.stack[this.stack.length - 1]);
   }
 
   get isCurrentSymbolQuote(): boolean {
@@ -190,8 +198,21 @@ class Parser {
     return this.currentSymbolCharCode == Token.COMMA;
   }
 
+  get isCurrentSymbolCloseBrace(): boolean {
+    return this.currentSymbolCharCode == Token.CLOSE_BRACE;
+  }
+
   get currentSymbolCharCode(): number {
-    return this.input[this.cursor].charCodeAt(0);
+    return this.currentSymbol.charCodeAt(0);
+  }
+
+  get currentSymbol(): string {
+    return this.input[this.cursor];
+  }
+
+  _printState() {
+    log(this.input[this.cursor]);
+    log(this.stack[this.stack.length - 1]);
   }
 }
 
