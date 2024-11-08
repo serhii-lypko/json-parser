@@ -5,35 +5,26 @@ type $fixme = any;
 /*
   * push down state automata *
 
-  🟡 The very first objective:
-  Only strings and nested strings. No numbers, booleans, nulls or arrays.
-
-
-  ...
+  // TODO:
 
   - handle escaping
   - trim whitespaces
+  - test cases with broken inputs
+  - split on different files
 */
-
-// const string = `{"widget":{"debug":"on","text":{"data":"Click Here","size":36}}}`;
-
-// TODO: test cases with broken inputs:
-// {"widget:"awesome","element":"hello"}
 
 // const simple = `{"widget":"awesome","element":"hello","right":"yes"}`;
 // const simple = `{"widget":"awesome"}`;
-const simple = `{"widget":"awesome","amazing":{"element":"hello","yeah":"definitely","newKey":{"yes":"new key"}}}`;
-// const str2 = `{"widget":{"debug":"on","logger":"off"}}`;
-
-// NOTE: let's pretend now values can be only string or object
-// const str2 = `{"widget":{"debug":"on","is_valid":true,"age":555}}`;
+// const simple = `{"widget":"awesome","amazing":{"element":"hello","yeah":"definitely","newKey":{"yes":"new key"}}}`;
+// const simple = `{"array":["one","two","three",["hello"]]}`;
+const simple = `{"ireland":{"people":[{"name":"Alex"},{"name":"John"},{"name":"Cian"}]},"spain":{"people":[{"name":"Antonio"},{"name":"Juan"},{"name":"Pedro"}]}}`;
 
 // NOTE: is it correct to call it tokens?
 enum Token {
   OPEN_BRACE = '{'.charCodeAt(0),
   CLOSE_BRACE = '}'.charCodeAt(0),
   OPEN_BRACKET = '['.charCodeAt(0),
-  CLOSE_BRACKET = '['.charCodeAt(0),
+  CLOSE_BRACKET = ']'.charCodeAt(0),
   COLON = ':'.charCodeAt(0),
   COMMA = ','.charCodeAt(0),
   QUOTE = '"'.charCodeAt(0),
@@ -108,13 +99,22 @@ class Parser {
   }
 
   parseRecordLevel() {
+    /// They key should be always string
     if (!this.isCurrentSymbolQuote) {
       throw new Error('Unexpected character at the record level opening');
     }
 
     while (this.currentSymbolCharCode != Token.CLOSE_BRACE) {
-      log('iter');
-      this.parseKVRecord();
+      const key = this.parseString();
+
+      /// Expecting a :
+      if (!this.isCurrentSymbolColon) {
+        throw new Error(
+          `Unexpected character between KV pair elements ${this.currentSymbol}`
+        );
+      }
+      this.advanceCursor();
+      this.stack[this.stack.length - 1][key] = this.parseKVValue();
 
       switch (this.currentSymbolCharCode) {
         case Token.CLOSE_BRACE:
@@ -130,21 +130,23 @@ class Parser {
     }
   }
 
-  parseKVRecord() {
-    const key = this.parseString();
-
-    /// Expecting a :
-    if (!this.isCurrentSymbolColon) {
-      throw new Error(
-        `Unexpected character between KV pair elements ${this.currentSymbol}`
-      );
-    }
-    this.advanceCursor();
-    this.stack[this.stack.length - 1][key] = this.parseKVValue();
-  }
-
   parseArrayLevel() {
-    //
+    while (this.currentSymbolCharCode != Token.CLOSE_BRACKET) {
+      switch (this.currentSymbolCharCode) {
+        case Token.QUOTE:
+          this.stack[this.stack.length - 1].push(this.parseString());
+          continue;
+        case Token.OPEN_BRACE:
+        case Token.OPEN_BRACKET:
+          this.stack[this.stack.length - 1].push(this.openLevel());
+          continue;
+        case Token.COMMA:
+          this.advanceCursor();
+          continue;
+        case Token.CLOSE_BRACKET:
+          break;
+      }
+    }
   }
 
   parseString() {
@@ -208,11 +210,6 @@ class Parser {
 
   get currentSymbol(): string {
     return this.input[this.cursor];
-  }
-
-  _printState() {
-    log(this.input[this.cursor]);
-    log(this.stack[this.stack.length - 1]);
   }
 }
 
